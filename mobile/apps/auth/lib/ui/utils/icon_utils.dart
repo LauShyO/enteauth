@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:ente_auth/ente_theme_data.dart';
 import 'package:ente_auth/models/all_icon_data.dart';
+import 'package:ente_auth/services/code_icon_store.dart';
 import 'package:ente_auth/theme/ente_theme.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -114,7 +115,28 @@ class IconUtils {
     }
   }
 
-  Widget getIcon(BuildContext context, String provider, {double width = 24}) {
+  Widget getIcon(
+    BuildContext context,
+    String provider, {
+    double width = 24,
+    String? galleryIconId,
+  }) {
+    // Local addition (enteauth slice): a gallery-picked image wins over the
+    // bundled icon set. When its bytes are missing locally, fall through to
+    // the bundled icon so the row still shows something.
+    if (galleryIconId != null && galleryIconId.isNotEmpty) {
+      final bytes = CodeIconStore.instance.bytesFor(galleryIconId);
+      if (bytes != null) {
+        return Image.memory(
+          bytes,
+          width: width,
+          fit: BoxFit.contain,
+          errorBuilder: (context, error, stackTrace) {
+            return _fallbackAvatar(provider, width, context);
+          },
+        );
+      }
+    }
     try {
       final providerTitle = _getProviderTitle(provider);
       final List<String> titlesList = [providerTitle];

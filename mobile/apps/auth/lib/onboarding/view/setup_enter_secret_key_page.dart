@@ -1,10 +1,13 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:ente_auth/events/codes_updated_event.dart';
 import 'package:ente_auth/models/all_icon_data.dart';
 import 'package:ente_auth/models/code.dart';
 import 'package:ente_auth/models/code_display.dart';
+import 'package:ente_auth/services/code_icon_store.dart';
 import 'package:ente_auth/store/code_display_store.dart';
+import 'package:ente_auth/store/code_store.dart';
 import 'package:ente_auth/ui/components/custom_icon_widget.dart';
 import 'package:ente_auth/ui/custom_icon_page.dart';
 import 'package:ente_auth/ui/settings/components/auth_settings_page_scaffold.dart';
@@ -17,6 +20,7 @@ import 'package:ente_events/event_bus.dart';
 import "package:ente_strings/ente_strings.dart";
 import 'package:ente_ui/components/buttons/button_widget.dart';
 import 'package:ente_ui/components/buttons/models/button_result.dart';
+import 'package:file_picker/file_picker.dart';
 import "package:flutter/material.dart";
 import 'package:flutter/services.dart';
 import 'package:logging/logging.dart';
@@ -61,6 +65,9 @@ class _SetupEnterSecretKeyPageState extends State<SetupEnterSecretKeyPage> {
   bool isCustomIcon = false;
   String _customIconID = "";
   late IconType _iconSrc;
+  // Local addition (enteauth slice): gallery-picked icon image id. Empty
+  // means the code uses a bundled icon.
+  String _galleryIconImageId = "";
   late Algorithm _algorithm;
   late Type _type;
   final ValueNotifier<bool> showAdvancedOptions = ValueNotifier<bool>(false);
@@ -117,6 +124,7 @@ class _SetupEnterSecretKeyPageState extends State<SetupEnterSecretKeyPage> {
     _iconSrc = widget.code?.display.iconSrc == "simpleIcon"
         ? IconType.simpleIcon
         : IconType.customIcon;
+    _galleryIconImageId = widget.code?.display.iconImageId ?? "";
 
     _algorithm = widget.code == null ? Algorithm.sha1 : widget.code!.algorithm;
     _type = widget.code == null ? Type.totp : widget.code!.type;
@@ -170,9 +178,36 @@ class _SetupEnterSecretKeyPageState extends State<SetupEnterSecretKeyPage> {
                           onTap: navigateToCustomIconPage,
                           child: Padding(
                             padding: const EdgeInsets.all(Spacing.sm),
-                            child: CustomIconWidget(iconData: _customIconID),
+                            child: CustomIconWidget(
+                              iconData: _customIconID,
+                              galleryIconId: _galleryIconImageId,
+                            ),
                           ),
                         ),
+                      ),
+                    ),
+                    // Local addition (enteauth slice): pick any image from
+                    // the gallery as this code's icon.
+                    Center(
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          TextButton.icon(
+                            onPressed: _pickGalleryIcon,
+                            icon: const Icon(Icons.photo_library_outlined),
+                            label: Text(l10n.pickIconFromGallery),
+                          ),
+                          if (_galleryIconImageId.isNotEmpty)
+                            TextButton.icon(
+                              onPressed: () {
+                                setState(() {
+                                  _galleryIconImageId = "";
+                                });
+                              },
+                              icon: const Icon(Icons.delete_outline),
+                              label: Text(l10n.removeGalleryIcon),
+                            ),
+                        ],
                       ),
                     ),
                     const SizedBox(height: Spacing.xl),
@@ -551,6 +586,9 @@ class _SetupEnterSecretKeyPageState extends State<SetupEnterSecretKeyPage> {
       display.iconSrc = _iconSrc == IconType.simpleIcon
           ? 'simpleIcon'
           : 'customIcon';
+      // Local addition (enteauth slice): persist the gallery icon choice.
+      final previousIconImageId = widget.code?.display.iconImageId ?? "";
+      display.iconImageId = _galleryIconImageId;
 
       if (widget.code != null && widget.code!.secret != secret) {
         ButtonResult? result = await showChoiceActionSheet(
@@ -591,6 +629,15 @@ class _SetupEnterSecretKeyPageState extends State<SetupEnterSecretKeyPage> {
 
       getOTP(newCode);
       if (!mounted) return;
+      // Local addition (enteauth slice): drop the replaced gallery image
+      // file when no other code references it.
+      if (previousIconImageId.isNotEmpty &&
+          previousIconImageId != _galleryIconImageId) {
+        _pruneUnreferencedIcon(
+          previousIconImageId,
+          exceptGeneratedID: widget.code?.generatedID,
+        ).ignore();
+      }
       Navigator.of(context).pop(newCode);
     } catch (e, s) {
       _logger.severe("Error saving code", e, s);
@@ -625,6 +672,64 @@ class _SetupEnterSecretKeyPageState extends State<SetupEnterSecretKeyPage> {
     setState(() {
       _customIconID = newCustomIcon.title;
       _iconSrc = newCustomIcon.type;
+      // Picking a bundled icon replaces the gallery image.
+      _galleryIconImageId = "";
     });
+  }
+
+  /// Local addition (enteauth slice): pick an image file, downscale it and
+  /// keep it as this code's icon.
+  Future<void> _pickGalleryIcon() async {
+    try {
+      final result = await FilePicker.pickFiles(
+        type: FileType.image,
+        allowMultiple: false,
+        withData: true,
+      );
+      if (result == null || result.files.isEmpty || !mounted) return;
+      final file = result.files.single;
+      Uint8List? bytes = file.bytes;
+      bytes ??= file.path != null
+          ? await File(file.path!).readAsBytes()
+          : null;
+      if (bytes == null) {
+        if (!mounted) return;
+        showToast(context, context.strings.pickIconFailed);
+        return;
+      }
+      if (bytes.length > CodeIconStore.maxSourceBytes) {
+        if (!mounted) return;
+        showToast(context, context.strings.pickIconFileTooLarge);
+        return;
+      }
+      final iconId = await CodeIconStore.instance.savePickedImage(bytes);
+      if (!mounted) return;
+      setState(() {
+        _galleryIconImageId = iconId;
+      });
+    } catch (e, s) {
+      _logger.warning('Failed to pick gallery icon', e, s);
+      if (!mounted) return;
+      showToast(context, context.strings.pickIconFailed);
+    }
+  }
+
+  Future<void> _pruneUnreferencedIcon(
+    String iconImageId, {
+    int? exceptGeneratedID,
+  }) async {
+    try {
+      final codes = await CodeStore.instance.getAllCodes(sortCodes: false);
+      final stillReferenced = codes.any(
+        (code) =>
+            code.generatedID != exceptGeneratedID &&
+            code.display.iconImageId == iconImageId,
+      );
+      if (!stillReferenced) {
+        await CodeIconStore.instance.deleteIcon(iconImageId);
+      }
+    } catch (e, s) {
+      _logger.warning('Failed to prune gallery icon', e, s);
+    }
   }
 }

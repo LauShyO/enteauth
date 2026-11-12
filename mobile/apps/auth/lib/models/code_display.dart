@@ -14,6 +14,10 @@ class CodeDisplay {
   String iconSrc;
   String iconID;
 
+  /// Gallery-picked icon image id (see CodeIconStore). Empty when the code
+  /// uses a bundled icon. Local addition (enteauth slice).
+  String iconImageId;
+
   CodeDisplay({
     this.pinned = false,
     this.trashed = false,
@@ -24,6 +28,7 @@ class CodeDisplay {
     this.position = 0,
     this.iconSrc = '',
     this.iconID = '',
+    this.iconImageId = '',
   });
 
   bool get isCustomIcon => (iconSrc != '' && iconID != '');
@@ -38,6 +43,7 @@ class CodeDisplay {
     int? position,
     String? iconSrc,
     String? iconID,
+    String? iconImageId,
   }) {
     final bool updatedPinned = pinned ?? this.pinned;
     final bool updatedTrashed = trashed ?? this.trashed;
@@ -48,6 +54,7 @@ class CodeDisplay {
     final int updatedPosition = position ?? this.position;
     final String updatedIconSrc = iconSrc ?? this.iconSrc;
     final String updatedIconID = iconID ?? this.iconID;
+    final String updatedIconImageId = iconImageId ?? this.iconImageId;
 
     return CodeDisplay(
       pinned: updatedPinned,
@@ -59,6 +66,7 @@ class CodeDisplay {
       position: updatedPosition,
       iconSrc: updatedIconSrc,
       iconID: updatedIconID,
+      iconImageId: updatedIconImageId,
     );
   }
 
@@ -76,6 +84,7 @@ class CodeDisplay {
       position: json['position'] ?? 0,
       iconSrc: json['iconSrc'] ?? 'ente',
       iconID: json['iconID'] ?? '',
+      iconImageId: json['iconImageId'] ?? '',
     );
   }
 
@@ -117,6 +126,7 @@ class CodeDisplay {
       'position': position,
       'iconSrc': iconSrc,
       'iconID': iconID,
+      'iconImageId': iconImageId,
     };
   }
 

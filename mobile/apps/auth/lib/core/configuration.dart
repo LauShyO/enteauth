@@ -33,6 +33,9 @@ class Configuration extends BaseConfiguration
   static const offlineAuthSecretKey = "offline_auth_secret_key";
   static const hasOptedForOfflineModeKey = "has_opted_for_offline_mode";
   static const autoBackupPasswordKey = "autoBackupPassword";
+  // Local addition (enteauth slice): WebDAV sync credentials.
+  static const webdavPasswordKey = "webdav_sync_password";
+  static const webdavSyncPasswordKey = "webdav_vault_password";
 
   late SharedPreferences _preferences;
   String? _authSecretKey;
@@ -163,5 +166,29 @@ class Configuration extends BaseConfiguration
 
   Future<void> clearBackupPassword() async {
     await _secureStorage.delete(key: autoBackupPasswordKey);
+  }
+
+  Future<String?> getWebdavPassword() async {
+    return _secureStorage.read(key: webdavPasswordKey);
+  }
+
+  Future<void> setWebdavPassword(String password) async {
+    await _secureStorage.write(key: webdavPasswordKey, value: password);
+  }
+
+  Future<void> clearWebdavPassword() async {
+    await _secureStorage.delete(key: webdavPasswordKey);
+  }
+
+  Future<String?> getWebdavSyncPassword() async {
+    return _secureStorage.read(key: webdavSyncPasswordKey);
+  }
+
+  Future<void> setWebdavSyncPassword(String password) async {
+    await _secureStorage.write(key: webdavSyncPasswordKey, value: password);
+  }
+
+  Future<void> clearWebdavSyncPassword() async {
+    await _secureStorage.delete(key: webdavSyncPasswordKey);
   }
 }

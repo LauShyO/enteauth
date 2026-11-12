@@ -18,6 +18,10 @@ class LocalAuthEntity {
   // True for local changes awaiting remote sync.
   final bool shouldSync;
 
+  // Stable cross-device identity for WebDAV sync (offline mode only).
+  // Null for rows in the online database, which keys on the server id.
+  final String? syncId;
+
   LocalAuthEntity(
     this.generatedID,
     this.id,
@@ -25,8 +29,9 @@ class LocalAuthEntity {
     this.header,
     this.createdAt,
     this.updatedAt,
-    this.shouldSync,
-  );
+    this.shouldSync, {
+    this.syncId,
+  });
 
   LocalAuthEntity copyWith({
     int? generatedID,
@@ -36,6 +41,7 @@ class LocalAuthEntity {
     int? createdAt,
     int? updatedAt,
     bool? shouldSync,
+    String? syncId,
   }) {
     return LocalAuthEntity(
       generatedID ?? this.generatedID,
@@ -45,10 +51,11 @@ class LocalAuthEntity {
       createdAt ?? this.createdAt,
       updatedAt ?? this.updatedAt,
       shouldSync ?? this.shouldSync,
+      syncId: syncId ?? this.syncId,
     );
   }
 
-  Map<String, dynamic> toMap() {
+  Map<String, dynamic> toMap({bool includeSyncId = false}) {
     return {
       '_generatedID': generatedID,
       'id': id,
@@ -57,6 +64,7 @@ class LocalAuthEntity {
       'createdAt': createdAt,
       'updatedAt': updatedAt,
       'shouldSync': shouldSync ? 1 : 0,
+      if (includeSyncId && syncId != null) 'syncId': syncId,
     };
   }
 
@@ -69,6 +77,7 @@ class LocalAuthEntity {
       map['createdAt']!,
       map['updatedAt']!,
       (map['shouldSync']! == 0) ? false : true,
+      syncId: map['syncId'] as String?,
     );
   }
 

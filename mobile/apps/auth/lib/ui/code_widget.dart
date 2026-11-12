@@ -867,6 +867,7 @@ class _CodeWidgetState extends State<CodeWidget> {
         width: widget.isCompactMode
             ? (_shouldShowLargeIcon ? 32 : 24)
             : (_shouldShowLargeIcon ? 42 : 24),
+        galleryIconId: widget.code.display.iconImageId,
       ),
     );
   }

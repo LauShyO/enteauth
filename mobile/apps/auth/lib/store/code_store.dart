@@ -8,6 +8,7 @@ import 'package:ente_auth/models/authenticator/entity_result.dart';
 import 'package:ente_auth/models/code.dart';
 import 'package:ente_auth/models/code_parse_error.dart';
 import 'package:ente_auth/services/authenticator_service.dart';
+import 'package:ente_auth/services/code_icon_store.dart';
 import 'package:ente_auth/store/offline_authenticator_db.dart';
 import 'package:ente_events/event_bus.dart';
 import 'package:logging/logging.dart';
@@ -174,6 +175,22 @@ class CodeStore {
   Future<void> removeCode(Code code, {AccountMode? accountMode}) async {
     final mode = accountMode ?? _authenticatorService.getAccountMode();
     await _authenticatorService.deleteEntry(code.generatedID!, mode);
+    // Local addition (enteauth slice): drop the code's gallery icon file
+    // when no remaining code references it.
+    final iconImageId = code.display.iconImageId;
+    if (iconImageId.isNotEmpty) {
+      try {
+        final remaining = await getAllCodes(accountMode: mode);
+        final stillReferenced = remaining.any(
+          (c) => c.display.iconImageId == iconImageId,
+        );
+        if (!stillReferenced) {
+          await CodeIconStore.instance.deleteIcon(iconImageId);
+        }
+      } catch (e, s) {
+        _logger.warning('Failed to prune gallery icon', e, s);
+      }
+    }
     Bus.instance.fire(CodesUpdatedEvent());
   }
 

@@ -11,6 +11,7 @@ import 'package:ente_auth/models/authenticator/auth_entity.dart';
 import 'package:ente_auth/models/authenticator/auth_key.dart';
 import 'package:ente_auth/models/authenticator/entity_result.dart';
 import 'package:ente_auth/models/authenticator/local_auth_entity.dart';
+import 'package:ente_auth/models/webdav_vault.dart';
 import 'package:ente_auth/services/preference_service.dart';
 import 'package:ente_auth/store/authenticator_db.dart';
 import 'package:ente_auth/store/offline_authenticator_db.dart';
@@ -20,6 +21,7 @@ import 'package:ente_events/models/signed_in_event.dart';
 import 'package:flutter/foundation.dart';
 import 'package:logging/logging.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:uuid/uuid.dart';
 
 enum AccountMode { online, offline }
 
@@ -162,8 +164,84 @@ class AuthenticatorService {
     if (accountMode.isOnline) {
       await _db.deleteByIDs(generatedIDs: [genID]);
     } else {
+      // Local addition (enteauth slice): record a deletion tombstone so
+      // WebDAV sync can propagate the deletion to other devices.
+      if (result.syncId != null) {
+        await _offlineDb.putTombstones({
+          result.syncId!: DateTime.now().microsecondsSinceEpoch,
+        });
+      }
       await _offlineDb.deleteByIDs(generatedIDs: [genID]);
     }
+  }
+
+  /// Decrypted snapshot of the offline database for WebDAV sync. Throws
+  /// [OfflineSnapshotException] when any stored entity cannot be decrypted,
+  /// so a sync never silently drops codes it failed to read.
+  Future<OfflineSyncSnapshot> getOfflineSyncSnapshot() async {
+    final rows = await _offlineDb.getAll();
+    final key = await getOrCreateAuthDataKey(AccountMode.offline);
+    final records = <WebdavVaultRecord>[];
+    var failures = 0;
+    for (final row in rows) {
+      try {
+        final decrypted = await CryptoUtil.decryptData(
+          CryptoUtil.base642bin(row.encryptedData),
+          key,
+          CryptoUtil.base642bin(row.header),
+        );
+        var syncId = row.syncId;
+        if (syncId == null) {
+          // Rows predating the syncId column get a stable id persisted
+          // before the snapshot is built, so the id never changes.
+          syncId = const Uuid().v4();
+          await _offlineDb.updateLocalEntity(row.copyWith(syncId: syncId));
+        }
+        records.add(
+          WebdavVaultRecord(
+            syncId: syncId,
+            createdAt: row.createdAt,
+            updatedAt: row.updatedAt,
+            data: utf8.decode(decrypted),
+          ),
+        );
+      } catch (e, s) {
+        failures++;
+        _logger.severe('Failed to decrypt offline entity ${row.generatedID}', e, s);
+      }
+    }
+    if (failures > 0) {
+      throw OfflineSnapshotException(failures);
+    }
+    final tombstones = await _offlineDb.getTombstones();
+    return OfflineSyncSnapshot(records: records, tombstones: tombstones);
+  }
+
+  /// Apply merged WebDAV sync state to the offline database: upsert the
+  /// winning records (re-encrypted with the local offline key), delete
+  /// tombstoned rows, and store the merged tombstones.
+  Future<void> applyOfflineSyncSnapshot({
+    required List<WebdavVaultRecord> upserts,
+    required List<String> deleteSyncIds,
+    required Map<String, int> tombstones,
+  }) async {
+    final key = await getOrCreateAuthDataKey(AccountMode.offline);
+    for (final record in upserts) {
+      final encrypted = await CryptoUtil.encryptData(
+        utf8.encode(record.data),
+        key,
+      );
+      await _offlineDb.upsertBySyncId(
+        syncId: record.syncId,
+        encData: CryptoUtil.bin2base64(encrypted.encryptedData!),
+        header: CryptoUtil.bin2base64(encrypted.header!),
+        createdAt: record.createdAt,
+        updatedAt: record.updatedAt,
+      );
+    }
+    await _offlineDb.deleteBySyncIds(deleteSyncIds);
+    await _offlineDb.putTombstones(tombstones);
+    Bus.instance.fire(CodesUpdatedEvent());
   }
 
   Future<bool> onlineSync() {
@@ -330,4 +408,22 @@ class AuthenticatorService {
       rethrow;
     }
   }
+}
+
+/// Decrypted contents of the offline database, ready for WebDAV sync.
+class OfflineSyncSnapshot {
+  final List<WebdavVaultRecord> records;
+  final Map<String, int> tombstones;
+
+  const OfflineSyncSnapshot({required this.records, required this.tombstones});
+}
+
+class OfflineSnapshotException implements Exception {
+  final int undecryptableCount;
+
+  const OfflineSnapshotException(this.undecryptableCount);
+
+  @override
+  String toString() =>
+      'OfflineSnapshotException: $undecryptableCount stored codes could not be decrypted';
 }

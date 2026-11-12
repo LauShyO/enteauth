@@ -11,10 +11,12 @@ import 'package:ente_auth/locale.dart';
 import 'package:ente_auth/services/auth_theme_preferences.dart';
 import 'package:ente_auth/services/authenticator_service.dart';
 import 'package:ente_auth/services/billing_service.dart';
+import 'package:ente_auth/services/code_icon_store.dart';
 import 'package:ente_auth/services/local_backup_service.dart';
 import 'package:ente_auth/services/notification_service.dart';
 import 'package:ente_auth/services/preference_service.dart';
 import 'package:ente_auth/services/update_service.dart';
+import 'package:ente_auth/services/webdav_sync_service.dart';
 import 'package:ente_auth/services/window_listener_service.dart';
 import 'package:ente_auth/src/rust/frb_generated.dart';
 import 'package:ente_auth/src/rust/third_party/ente_frb_lib/accounts.dart'
@@ -234,4 +236,7 @@ Future<void> _init() async {
   await LocalBackupService.instance.init(
     hasOptedForOfflineMode: Configuration.instance.hasOptedForOfflineMode(),
   );
+  // Local addition (enteauth slice): gallery icons and WebDAV sync.
+  await CodeIconStore.instance.init();
+  await WebdavSyncService.instance.init();
 }

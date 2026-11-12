@@ -1,1 +1,81 @@
-{"added_files":["README.md","UPSTREAM.json","binary-files.txt","scripts/restore-binaries.sh","scripts/restore-binaries.ps1"],"auth_version":"4.4.28+1007","binary_files_excluded":280,"binary_manifest":"binary-files.txt","edited_files":["mobile/pubspec.yaml (workspace members trimmed to apps/auth + packages/*)"],"excluded_paths":["mobile/apps/photos","mobile/apps/locker","mobile/mobile-tests","mobile/checks","mobile/pubspec.lock","web/apps/* (except auth)","web/e2e","web/docs","web/checks","web/package-lock.json","desktop","server","cli","android","apple","docs","infra",".github","architecture"],"license":"AGPL-3.0","removed_junk":["mobile/apps/auth/macos/packaging/dmg/DS_Store"],"slice_paths":["LICENSE",".gitmodules",".gitignore","mobile/apps/.gitignore","mobile/apps/auth","mobile/packages","mobile/pubspec.yaml","mobile/analysis_options.yaml","mobile/.gitignore","mobile/cargokit","mobile/gradle","web/apps/auth","web/packages","web/package.json","web/.npmrc","web/.gitignore","web/.prettierrc.json","web/.prettierignore","web/crowdin.yml","web/scripts","rust"],"submodule":{"commit":"6dcfdc2f58f6150d7b097b5cab158d27413f6366","path":"mobile/apps/auth/assets/simple-icons","url":"https://github.com/simple-icons/simple-icons.git"},"upstream_commit":"6b0003ecee71f3c771c07469f5a145a641f02c9a","upstream_date":"2026-11-12","upstream_repo":"ente/ente","upstream_url":"https://github.com/ente/ente"}
+{
+  "added_files": [
+    "README.md",
+    "UPSTREAM.json",
+    "binary-files.txt",
+    "scripts/restore-binaries.sh",
+    "scripts/restore-binaries.ps1",
+    "mobile/apps/auth/lib/models/webdav_vault.dart",
+    "mobile/apps/auth/lib/services/webdav_sync_service.dart",
+    "mobile/apps/auth/lib/services/code_icon_store.dart",
+    "mobile/apps/auth/lib/ui/settings/data/webdav_settings_page.dart"
+  ],
+  "auth_version": "4.4.28+1007",
+  "binary_files_excluded": 280,
+  "binary_manifest": "binary-files.txt",
+  "edited_files": [
+    "mobile/pubspec.yaml (workspace members trimmed to apps/auth + packages/*)",
+    "mobile/apps/auth/lib/** (2026-11-12 local features: WebDAV sync + gallery icons; see README)"
+  ],
+  "excluded_paths": [
+    "mobile/apps/photos",
+    "mobile/apps/locker",
+    "mobile/mobile-tests",
+    "mobile/checks",
+    "mobile/pubspec.lock",
+    "web/apps/* (except auth)",
+    "web/e2e",
+    "web/docs",
+    "web/checks",
+    "web/package-lock.json",
+    "desktop",
+    "server",
+    "cli",
+    "android",
+    "apple",
+    "docs",
+    "infra",
+    ".github",
+    "architecture"
+  ],
+  "license": "AGPL-3.0",
+  "removed_junk": [
+    "mobile/apps/auth/macos/packaging/dmg/DS_Store"
+  ],
+  "slice_paths": [
+    "LICENSE",
+    ".gitmodules",
+    ".gitignore",
+    "mobile/apps/.gitignore",
+    "mobile/apps/auth",
+    "mobile/packages",
+    "mobile/pubspec.yaml",
+    "mobile/analysis_options.yaml",
+    "mobile/.gitignore",
+    "mobile/cargokit",
+    "mobile/gradle",
+    "web/apps/auth",
+    "web/packages",
+    "web/package.json",
+    "web/.npmrc",
+    "web/.gitignore",
+    "web/.prettierrc.json",
+    "web/.prettierignore",
+    "web/crowdin.yml",
+    "web/scripts",
+    "rust"
+  ],
+  "submodule": {
+    "commit": "6dcfdc2f58f6150d7b097b5cab158d27413f6366",
+    "path": "mobile/apps/auth/assets/simple-icons",
+    "url": "https://github.com/simple-icons/simple-icons.git"
+  },
+  "upstream_commit": "6b0003ecee71f3c771c07469f5a145a641f02c9a",
+  "upstream_date": "2026-11-12",
+  "upstream_repo": "ente/ente",
+  "upstream_url": "https://github.com/ente/ente",
+  "local_features": [
+    "WebDAV two-way sync for offline mode (encrypted single-file vault, per-entry merge by updatedAt, deletion tombstones, gallery icons synced)",
+    "Gallery-picked per-code icons (CodeDisplay.iconImageId + CodeIconStore, 512px PNG)"
+  ]
+}

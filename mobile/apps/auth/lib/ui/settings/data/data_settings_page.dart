@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:ente_auth/services/authenticator_service.dart';
 import 'package:ente_auth/services/deduplication_service.dart';
 import 'package:ente_auth/services/flagservice.dart';
 import 'package:ente_auth/ui/settings/components/auth_settings_navigation.dart';
@@ -8,6 +9,7 @@ import 'package:ente_auth/ui/settings/data/duplicate_code_page.dart';
 import 'package:ente_auth/ui/settings/data/export_widget.dart';
 import 'package:ente_auth/ui/settings/data/import_page.dart';
 import 'package:ente_auth/ui/settings/data/local_backup_settings_page.dart';
+import 'package:ente_auth/ui/settings/data/webdav_settings_page.dart';
 import 'package:ente_auth/utils/dialog_util.dart';
 import 'package:ente_components/ente_components.dart';
 import 'package:ente_strings/ente_strings.dart';
@@ -49,6 +51,17 @@ class DataSettingsPage extends StatelessWidget {
             icon: HugeIcons.strokeRoundedHardDrive,
             onTap: () =>
                 pushAuthSettingsPage(context, const LocalBackupSettingsPage()),
+          ),
+        ],
+        // Local addition (enteauth slice): WebDAV sync, offline mode only.
+        if (AuthenticatorService.instance.getAccountMode() ==
+            AccountMode.offline) ...[
+          const SizedBox(height: Spacing.sm),
+          SettingsItem(
+            title: l10n.webdavSync,
+            icon: HugeIcons.strokeRoundedCloudServer,
+            onTap: () =>
+                pushAuthSettingsPage(context, const WebdavSettingsPage()),
           ),
         ],
       ],

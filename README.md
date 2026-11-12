@@ -33,9 +33,14 @@ Ente Auth 的单仓切片：只取 Ente 单仓里与 Auth 有关的部分，Phot
 
 ## 与上游的差别
 
-除本 README、`UPSTREAM.json`、`binary-files.txt`、`scripts/` 这几个新文件外，只改了一个文件：
+切片本身除本 README、`UPSTREAM.json`、`binary-files.txt`、`scripts/` 这几个新文件外，只改了一个文件：
 
 - `mobile/pubspec.yaml`：workspace 成员列表去掉 `apps/locker`、`apps/photos` 与 8 个 Photos 插件，其余（共享包列表、`dependency_overrides`）原样保留
+
+在此之上，本仓加了两项上游没有的本地功能（2026-11-12，代码里以 `Local addition (enteauth slice)` 注释标出）：
+
+1. **WebDAV 同步（仅离线模式）**：设置 → 数据 → WebDAV 同步。整个离线库存成一个文件存到 WebDAV 服务器，文件用同步密码派生的密钥加密（与加密导出同一套信封），服务器上只有密文。按更新时间逐条合并，删除经墓碑传播，相册图标图片随库存一起同步。实现：`lib/services/webdav_sync_service.dart`、`lib/models/webdav_vault.dart`；离线库升级到 v2（`syncId` 列 + `deleted_entities` 墓碑表），旧库自动迁移。
+2. **相册自选图标**：编辑项目时，图标下方可从相册/文件选任意图片当图标（自动缩到 512px 存 PNG）。图标引用存在项目数据里，随 WebDAV 同步走；没图片时回落到内置图标。实现：`lib/services/code_icon_store.dart`，`CodeDisplay.iconImageId` 字段。
 
 其余文本文件与上游逐字节一致。
 

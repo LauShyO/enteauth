@@ -7,7 +7,11 @@ import 'package:flutter/material.dart';
 class CustomIconWidget extends StatelessWidget {
   final String iconData;
 
-  CustomIconWidget({super.key, required this.iconData});
+  /// Gallery-picked image id; when set and its bytes exist locally, the
+  /// image is shown instead of the bundled icon. Local addition.
+  final String? galleryIconId;
+
+  CustomIconWidget({super.key, required this.iconData, this.galleryIconId});
 
   @override
   Widget build(BuildContext context) {
@@ -40,6 +44,7 @@ class CustomIconWidget extends StatelessWidget {
                 context,
                 safeDecode(iconData).trim(),
                 width: 50,
+                galleryIconId: galleryIconId,
               ),
             ),
           ),
