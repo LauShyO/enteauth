@@ -1,11 +1,8 @@
 import 'dart:io';
 
-import 'package:ente_auth/core/configuration.dart';
 import 'package:ente_auth/services/flagservice.dart';
 import 'package:ente_auth/services/review_service.dart';
-import 'package:ente_auth/services/update_service.dart';
 import 'package:ente_auth/ui/settings/about_settings_page.dart';
-import 'package:ente_auth/ui/settings/account_settings_page.dart';
 import 'package:ente_auth/ui/settings/data/data_settings_page.dart';
 import 'package:ente_auth/ui/settings/data/local_backup_settings_page.dart';
 import 'package:ente_auth/ui/settings/general_settings_page.dart';
@@ -21,35 +18,11 @@ import 'package:hugeicons/hugeicons.dart';
 import 'package:url_launcher/url_launcher_string.dart';
 
 class SettingsSearchRegistry {
-  static List<SettingsSearchItem> getSearchableItems(
-    BuildContext context, {
-    required SettingsSearchAction onSignIn,
-    required SettingsSearchAction onLogout,
-  }) {
+  // Local change (enteauth slice): account, sign-in, logout, and
+  // check-for-updates entries are removed with the Ente account.
+  static List<SettingsSearchItem> getSearchableItems(BuildContext context) {
     final l10n = context.strings;
-    final hasLoggedIn = Configuration.instance.hasConfiguredAccount();
     return [
-      if (hasLoggedIn)
-        for (final title in [
-          l10n.account,
-          l10n.changeEmail,
-          l10n.changePassword,
-          l10n.recoveryKey,
-          l10n.deleteAccount,
-        ])
-          SettingsSearchItem(
-            title: title,
-            sectionPath: l10n.account,
-            icon: HugeIcons.strokeRoundedUser,
-            routeBuilder: (_) => const AccountSettingsPage(),
-          )
-      else
-        SettingsSearchItem(
-          title: l10n.signInToBackup,
-          sectionPath: l10n.settings,
-          icon: HugeIcons.strokeRoundedCloudUpload,
-          onTap: onSignIn,
-        ),
       for (final title in [
         l10n.data,
         l10n.importCodes,
@@ -76,14 +49,7 @@ class SettingsSearchRegistry {
             l10n.createBackupNow,
           ],
         ),
-      for (final title in [
-        l10n.security,
-        if (hasLoggedIn) ...[
-          l10n.emailVerificationToggle,
-          l10n.passkey,
-          l10n.viewActiveSessions,
-        ],
-      ])
+      for (final title in [l10n.security])
         SettingsSearchItem(
           title: title,
           sectionPath: l10n.security,
@@ -173,20 +139,12 @@ class SettingsSearchRegistry {
         l10n.blog,
         l10n.privacy,
         l10n.termsOfServicesTitle,
-        if (UpdateService.instance.supportsInAppUpdates()) l10n.checkForUpdates,
       ])
         SettingsSearchItem(
           title: title,
           sectionPath: l10n.about,
           icon: HugeIcons.strokeRoundedInformationCircle,
           routeBuilder: (_) => const AboutSettingsPage(),
-        ),
-      if (hasLoggedIn)
-        SettingsSearchItem(
-          title: l10n.logout,
-          sectionPath: l10n.settings,
-          icon: HugeIcons.strokeRoundedLogout05,
-          onTap: onLogout,
         ),
     ];
   }

@@ -41,6 +41,7 @@ Ente Auth 的单仓切片：只取 Ente 单仓里与 Auth 有关的部分，Phot
 
 1. **WebDAV 同步（仅离线模式）**：设置 → 数据 → WebDAV 同步。整个离线库存成一个文件存到 WebDAV 服务器，文件用同步密码派生的密钥加密（与加密导出同一套信封），服务器上只有密文。按更新时间逐条合并，删除经墓碑传播，相册图标图片随库存一起同步。实现：`lib/services/webdav_sync_service.dart`、`lib/models/webdav_vault.dart`；离线库升级到 v2（`syncId` 列 + `deleted_entities` 墓碑表），旧库自动迁移。
 2. **相册自选图标**：编辑项目时，图标下方可从相册/文件选任意图片当图标（自动缩到 512px 存 PNG）。图标引用存在项目数据里，随 WebDAV 同步走；没图片时回落到内置图标。实现：`lib/services/code_icon_store.dart`，`CodeDisplay.iconImageId` 字段。
+3. **去掉官方登录与账号体系**：启动直进离线主页，不再有登录/注册/账号/订阅/恢复密钥/删账号界面；在线同步已停用，只保留 WebDAV 同步。被摘掉的页面与服务文件保留在树里（已无引用，构建时 tree-shaking 移出二进制）。注意：此前用 Ente 账号登录过的设备，其在线库数据不会显示，本仓没有在线→离线迁移。
 
 其余文本文件与上游逐字节一致。
 

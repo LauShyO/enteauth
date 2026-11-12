@@ -1,8 +1,6 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:ente_account_deletion/account_deletion.dart';
-import 'package:ente_accounts/services/user_service.dart';
 import 'package:ente_auth/app/view/app.dart';
 import 'package:ente_auth/core/configuration.dart';
 import 'package:ente_auth/core/constants.dart';
@@ -10,21 +8,16 @@ import 'package:ente_auth/ente_theme_data.dart';
 import 'package:ente_auth/locale.dart';
 import 'package:ente_auth/services/auth_theme_preferences.dart';
 import 'package:ente_auth/services/authenticator_service.dart';
-import 'package:ente_auth/services/billing_service.dart';
 import 'package:ente_auth/services/code_icon_store.dart';
 import 'package:ente_auth/services/local_backup_service.dart';
 import 'package:ente_auth/services/notification_service.dart';
 import 'package:ente_auth/services/preference_service.dart';
-import 'package:ente_auth/services/update_service.dart';
 import 'package:ente_auth/services/webdav_sync_service.dart';
 import 'package:ente_auth/services/window_listener_service.dart';
 import 'package:ente_auth/src/rust/frb_generated.dart';
-import 'package:ente_auth/src/rust/third_party/ente_frb_lib/accounts.dart'
-    as accounts;
 import 'package:ente_auth/store/authenticator_db.dart';
 import 'package:ente_auth/store/code_display_store.dart';
 import 'package:ente_auth/store/code_store.dart';
-import 'package:ente_auth/ui/home_page.dart';
 import 'package:ente_auth/ui/utils/icon_utils.dart';
 import 'package:ente_auth/utils/debug_build_flags.dart';
 import 'package:ente_auth/utils/directory_utils.dart' as auth_dir_utils;
@@ -37,7 +30,6 @@ import 'package:ente_lock_screen/lock_screen_settings.dart';
 import 'package:ente_lock_screen/ui/app_lock.dart';
 import 'package:ente_lock_screen/ui/lock_screen.dart';
 import 'package:ente_logging/logging.dart';
-import 'package:ente_network/network.dart';
 import 'package:ente_pure_utils/ente_pure_utils.dart';
 import 'package:ente_strings/ente_strings.dart';
 import 'package:ente_ui/theme/theme_config.dart';
@@ -153,7 +145,6 @@ Future<void> _runInForeground() async {
       rethrow;
     }
     final Locale? locale = await getLocale(noFallback: true);
-    unawaited(UpdateService.instance.showUpdateNotification());
     runApp(
       AppLock(
         builder: (args) => App(locale: locale, savedThemeMode: savedThemeMode),
@@ -212,17 +203,15 @@ Future<void> _init() async {
   await CodeStore.instance.init();
   await CodeDisplayStore.instance.init();
   await Configuration.instance.init([AuthenticatorDB.instance]);
+  // Local change (enteauth slice): no Ente account. The app always runs in
+  // offline mode, so opt in (generating the offline key) on first launch
+  // instead of showing any login/onboarding UI.
+  if (!Configuration.instance.hasOptedForOfflineMode()) {
+    await Configuration.instance.optForOfflineMode();
+  }
   await cleanupPickedImagesOnStartup(logger: _logger);
-  await Network.instance.init(Configuration.instance);
-  await UserService.instance.init(
-    Configuration.instance,
-    const HomePage(),
-    createAccountsClient: accounts.createAccountsClient,
-  );
   await AuthenticatorService.instance.init();
-  await BillingService.instance.init();
   await NotificationService.instance.init();
-  await UpdateService.instance.init();
   await IconUtils.instance.init();
   await LockScreenSettings.instance.init(
     Configuration.instance,
@@ -232,7 +221,6 @@ Future<void> _init() async {
   if (shouldAllowAuthScreenCapture) {
     await LockScreenSettings.instance.setHideAppContent(false, persist: false);
   }
-  AccountDeletionSettings.instance.init(host: Configuration.instance);
   await LocalBackupService.instance.init(
     hasOptedForOfflineMode: Configuration.instance.hasOptedForOfflineMode(),
   );

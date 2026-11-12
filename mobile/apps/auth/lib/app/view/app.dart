@@ -1,19 +1,8 @@
-import 'dart:async';
-
-import 'package:ente_accounts/services/user_service.dart';
-import 'package:ente_auth/core/configuration.dart';
 import 'package:ente_auth/ente_theme_data.dart';
 import 'package:ente_auth/locale.dart';
-import 'package:ente_auth/onboarding/view/onboarding_page.dart';
 import 'package:ente_auth/services/auth_theme_preferences.dart';
-import 'package:ente_auth/services/authenticator_service.dart';
-import 'package:ente_auth/services/update_service.dart';
 import 'package:ente_auth/services/window_listener_service.dart';
 import 'package:ente_auth/ui/home_page.dart';
-import 'package:ente_auth/ui/settings/app_update_sheet.dart';
-import 'package:ente_events/event_bus.dart';
-import 'package:ente_events/models/signed_in_event.dart';
-import 'package:ente_events/models/signed_out_event.dart';
 import 'package:ente_logging/logging.dart';
 import 'package:ente_strings/ente_strings.dart';
 import 'package:flutter/foundation.dart';
@@ -48,10 +37,8 @@ class App extends StatefulWidget {
   State<App> createState() => _AppState();
 }
 
-class _AppState extends State<App> with WidgetsBindingObserver {
+class _AppState extends State<App> {
   static final Logger _renderErrorLogger = Logger('RenderError');
-  late StreamSubscription<SignedOutEvent> _signedOutEvent;
-  late StreamSubscription<SignedInEvent> _signedInEvent;
   late ThemeMode _themeMode;
   Locale? locale;
   void setLocale(Locale newLocale) {
@@ -71,52 +58,9 @@ class _AppState extends State<App> with WidgetsBindingObserver {
 
   @override
   void initState() {
-    WidgetsBinding.instance.addObserver(this);
     _themeMode = widget.savedThemeMode;
-
-    _signedOutEvent = Bus.instance.on<SignedOutEvent>().listen((event) {
-      if (mounted) {
-        setState(() {});
-      }
-    });
-    _signedInEvent = Bus.instance.on<SignedInEvent>().listen((event) {
-      UserService.instance.getUserDetailsV2().ignore();
-      if (mounted) {
-        setState(() {});
-      }
-    });
     locale = widget.locale;
-    UpdateService.instance.shouldShowUpdatePrompt().then((shouldUpdate) {
-      if (shouldUpdate) {
-        Future.delayed(Duration.zero, () {
-          if (!mounted) return;
-          unawaited(
-            showAppUpdateSheet(
-              context,
-              latestVersionInfo: UpdateService.instance.getLatestVersionInfo()!,
-            ),
-          );
-        });
-      }
-    });
     super.initState();
-  }
-
-  @override
-  void dispose() {
-    super.dispose();
-
-    _signedOutEvent.cancel();
-    _signedInEvent.cancel();
-  }
-
-  @override
-  Future<void> didChangeAppLifecycleState(AppLifecycleState state) async {
-    if (state == AppLifecycleState.resumed) {
-      if (Configuration.instance.hasConfiguredAccount()) {
-        AuthenticatorService.instance.onlineSync().ignore();
-      }
-    }
   }
 
   @override
@@ -142,21 +86,11 @@ class _AppState extends State<App> with WidgetsBindingObserver {
   }
 
   Map<String, WidgetBuilder> get _getRoutes {
+    // Local change (enteauth slice): no Ente account, no onboarding. The
+    // app always opens directly on the home page in offline mode.
     return {
       "/": (context) {
-        final config = Configuration.instance;
-        if (config.hasConfiguredAccount()) {
-          return const HomePage();
-        }
-        final hasOfflineAccount = config.hasOptedForOfflineMode();
-        final shouldShowOfflineKeyUnavailableDialog =
-            hasOfflineAccount && config.getOfflineSecretKey() == null;
-        return !shouldShowOfflineKeyUnavailableDialog && hasOfflineAccount
-            ? const HomePage()
-            : OnboardingPage(
-                showOfflineKeyUnavailableDialog:
-                    shouldShowOfflineKeyUnavailableDialog,
-              );
+        return const HomePage();
       },
     };
   }

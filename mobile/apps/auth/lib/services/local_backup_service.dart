@@ -6,8 +6,6 @@ import 'package:ente_auth/core/configuration.dart';
 import 'package:ente_auth/models/export/ente.dart';
 import 'package:ente_auth/store/code_store.dart';
 import 'package:ente_crypto_api/ente_crypto_api.dart';
-import 'package:ente_events/event_bus.dart';
-import 'package:ente_events/models/signed_out_event.dart';
 import 'package:intl/intl.dart';
 import 'package:logging/logging.dart';
 import 'package:path/path.dart' as p;
@@ -25,11 +23,9 @@ class LocalBackupService {
   static const _iosBookmarkKey = 'autoBackupIosBookmark';
 
   Future<void> init({bool hasOptedForOfflineMode = false}) async {
+    // Local change (enteauth slice): the SignedOutEvent listener is gone
+    // with the Ente account; there is nothing to sign out of.
     await _clearBackupPasswordIfFreshInstall(hasOptedForOfflineMode);
-
-    Bus.instance.on<SignedOutEvent>().listen((event) {
-      _clearBackupPassword();
-    });
   }
 
   // Clear any backup password left in secure storage by an earlier install.

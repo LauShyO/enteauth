@@ -76,6 +76,7 @@
   "upstream_url": "https://github.com/ente/ente",
   "local_features": [
     "WebDAV two-way sync for offline mode (encrypted single-file vault, per-entry merge by updatedAt, deletion tombstones, gallery icons synced)",
-    "Gallery-picked per-code icons (CodeDisplay.iconImageId + CodeIconStore, 512px PNG)"
+    "Gallery-picked per-code icons (CodeDisplay.iconImageId + CodeIconStore, 512px PNG)",
+    "Removed Ente account/login; app boots straight to offline home, WebDAV sync only (dead account files kept, tree-shaken out)"
   ]
 }

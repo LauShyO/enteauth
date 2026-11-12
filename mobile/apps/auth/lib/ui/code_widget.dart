@@ -3,7 +3,6 @@ import 'dart:io';
 
 import 'package:auto_size_text/auto_size_text.dart';
 import 'package:clipboard/clipboard.dart';
-import 'package:ente_auth/core/configuration.dart';
 import 'package:ente_auth/ente_theme_data.dart';
 import 'package:ente_auth/events/multi_select_action_requested_event.dart';
 import 'package:ente_auth/models/code.dart';
@@ -65,7 +64,6 @@ class _CodeWidgetState extends State<CodeWidget> {
   final ValueNotifier<String> _nextCode = ValueNotifier<String>("");
   final Logger logger = Logger("_CodeWidgetState");
   bool _isInitialized = false;
-  late bool hasConfiguredAccount;
   late bool _shouldShowLargeIcon;
   late bool _hideCode;
   bool isMaskingEnabled = false;
@@ -106,7 +104,6 @@ class _CodeWidgetState extends State<CodeWidget> {
         }
       }
     });
-    hasConfiguredAccount = Configuration.instance.hasConfiguredAccount();
   }
 
   @override
@@ -600,14 +597,9 @@ class _CodeWidgetState extends State<CodeWidget> {
           Row(
             mainAxisAlignment: MainAxisAlignment.end,
             children: [
-              (widget.code.hasSynced != null && widget.code.hasSynced!) ||
-                      !hasConfiguredAccount
-                  ? const SizedBox.shrink()
-                  : const Icon(
-                      Icons.sync_disabled,
-                      size: 20,
-                      color: Colors.amber,
-                    ),
+              // Local change (enteauth slice): the Ente-sync "unsynced"
+              // indicator is gone with the account; nothing to show here.
+              const SizedBox.shrink(),
               const SizedBox(width: 12),
               _shouldShowLargeIcon ? const SizedBox.shrink() : _getIcon(),
             ],

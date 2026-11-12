@@ -3,13 +3,10 @@ import 'dart:io';
 
 import 'package:app_links/app_links.dart';
 import 'package:collection/collection.dart';
-import 'package:ente_accounts/services/user_service.dart';
-import 'package:ente_auth/core/configuration.dart';
 import 'package:ente_auth/ente_theme_data.dart';
 import 'package:ente_auth/events/codes_updated_event.dart';
 import 'package:ente_auth/events/icons_changed_event.dart';
 import 'package:ente_auth/events/multi_select_action_requested_event.dart';
-import 'package:ente_auth/events/trigger_logout_event.dart';
 import 'package:ente_auth/models/code.dart';
 import 'package:ente_auth/onboarding/model/tag_enums.dart';
 import 'package:ente_auth/onboarding/view/common/tag_chip.dart';
@@ -20,7 +17,6 @@ import 'package:ente_auth/services/preference_service.dart';
 import 'package:ente_auth/store/code_display_store.dart';
 import 'package:ente_auth/store/code_store.dart';
 import 'package:ente_auth/theme/ente_theme.dart';
-import 'package:ente_auth/ui/account/logout_dialog.dart';
 import 'package:ente_auth/ui/code_error_widget.dart';
 import 'package:ente_auth/ui/code_widget.dart';
 import 'package:ente_auth/ui/components/auth_qr_dialog.dart';
@@ -85,10 +81,7 @@ String addedCodeFocusSearchQuery(Code code) {
 
 class _HomePageState extends State<HomePage> {
   final _codeDisplayStore = CodeDisplayStore.instance;
-  late final _settingsPage = SettingsPage(
-    emailNotifier: UserService.instance.emailValueNotifier,
-    scaffoldKey: scaffoldKey,
-  );
+  late final _settingsPage = SettingsPage(scaffoldKey: scaffoldKey);
   bool _hasLoaded = false;
   bool _isSettingsOpen = false;
   bool _isImportingFromGallery = false;
@@ -107,7 +100,6 @@ class _HomePageState extends State<HomePage> {
   List<Code> _filteredCodes = [];
   StreamSubscription<CodesUpdatedEvent>? _streamSubscription;
   StreamSubscription<String>? _deepLinkSubscription;
-  StreamSubscription<TriggerLogoutEvent>? _triggerLogoutEvent;
   StreamSubscription<IconsChangedEvent>? _iconsChangedEvent;
   StreamSubscription<MultiSelectActionRequestedEvent>?
   _multiSelectActionSubscription;
@@ -135,18 +127,8 @@ class _HomePageState extends State<HomePage> {
     _multiSelectActionSubscription = Bus.instance
         .on<MultiSelectActionRequestedEvent>()
         .listen(_handleMultiSelectAction);
-    _triggerLogoutEvent = Bus.instance.on<TriggerLogoutEvent>().listen((
-      event,
-    ) async {
-      if (!mounted) return;
-      await autoLogoutAlert(context);
-    });
 
     _initDeepLinks();
-    Future.delayed(
-      const Duration(seconds: 1),
-      () async => await CodeStore.instance.importOfflineCodes(),
-    );
     _iconsChangedEvent = Bus.instance.on<IconsChangedEvent>().listen((event) {
       setState(() {});
     });
@@ -1202,7 +1184,6 @@ class _HomePageState extends State<HomePage> {
   void dispose() {
     _streamSubscription?.cancel();
     _deepLinkSubscription?.cancel();
-    _triggerLogoutEvent?.cancel();
     _iconsChangedEvent?.cancel();
     _multiSelectActionSubscription?.cancel();
     _textController.dispose();
@@ -2014,11 +1995,9 @@ class _HomePageState extends State<HomePage> {
 
   int lastScanTime = DateTime.now().millisecondsSinceEpoch - 1000;
   void _handleDeeplink(BuildContext context, String? link) {
-    bool isAccountConfigured = Configuration.instance.hasConfiguredAccount();
-    bool isOfflineModeEnabled =
-        Configuration.instance.hasOptedForOfflineMode() &&
-        Configuration.instance.getOfflineSecretKey() != null;
-    if (!(isAccountConfigured || isOfflineModeEnabled) || link == null) {
+    // Local change (enteauth slice): no Ente account; offline mode is
+    // always enabled by startup, so only a missing link bails out.
+    if (link == null) {
       return;
     }
     final lowerLink = link.toLowerCase();
