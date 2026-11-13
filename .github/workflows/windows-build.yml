@@ -1,0 +1,120 @@
+name: "Build Windows (Auth slice)"
+
+# Slice adaptation of upstream ente/ente .github/workflows/auth-build.yml
+# (build-windows job, at upstream commit 6b0003e). Builds the de-logined,
+# WebDAV-enabled Ente Auth Flutter app for Windows and uploads a portable
+# zip as a workflow artifact. No installer, no code signing, no Release
+# publishing: iterate via artifacts first.
+#
+# Slice differences from upstream (see README.md in this repo):
+# - 280 binary files are not stored in this repo; restore-binaries.ps1
+#   fetches them from upstream at the pinned commit and verifies hashes.
+# - The simple-icons submodule pointer (gitlink) could not be pushed into
+#   this repo; the pinned commit is cloned directly instead.
+# - No pubspec.lock is stored; `flutter pub get` resolves fresh.
+
+on:
+    push:
+        branches:
+            - main
+    workflow_dispatch:
+
+permissions:
+    contents: read
+
+concurrency:
+    group: windows-build
+    cancel-in-progress: true
+
+jobs:
+    build-windows:
+        # VS2022 is required until local_auth_windows builds cleanly on VS2026.
+        runs-on: windows-2022
+
+        defaults:
+            run:
+                working-directory: mobile/apps/auth
+
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+            - name: Install Flutter
+              uses: ./.github/actions/setup-flutter
+
+            # Needed for Pub to checkout flutter/packages on Windows.
+            # https://github.com/dart-lang/pub/issues/3803
+            - name: Enable Git long paths
+              run: git config --global core.longpaths true
+
+            # Slice-only: restore the 280 binary files excluded from this
+            # repo (see binary-files.txt). The script downloads each file
+            # from upstream at the pinned commit and verifies its SHA256.
+            - name: Restore binary files from upstream
+              shell: pwsh
+              working-directory: ${{ github.workspace }}
+              run: |
+                  & ./scripts/restore-binaries.ps1
+
+            # Slice-only: clone the simple-icons submodule content at the
+            # pinned commit. The Flutter build bundles
+            # assets/simple-icons/icons/ and assets/simple-icons/_data/
+            # (see pubspec.yaml) and fails at the asset step without them.
+            # A blob-filtered clone fetches only the pinned tree's blobs.
+            - name: Restore simple-icons at pinned commit
+              shell: bash
+              working-directory: ${{ github.workspace }}
+              run: |
+                  set -euo pipefail
+                  git clone --filter=blob:none --no-checkout https://github.com/simple-icons/simple-icons.git mobile/apps/auth/assets/simple-icons
+                  git -C mobile/apps/auth/assets/simple-icons checkout 6dcfdc2f58f6150d7b097b5cab158d27413f6366
+                  test -d mobile/apps/auth/assets/simple-icons/icons
+                  test -d mobile/apps/auth/assets/simple-icons/_data
+
+            # No Rust toolchain setup step: the windows-2022 image ships
+            # Rust, and upstream's build-windows job relies on that too.
+            - name: Show Rust toolchain versions
+              run: |
+                  rustc --version
+                  cargo --version
+
+            - name: Restore Rust cache
+              uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+              with:
+                  workspaces: rust
+
+            # No --enforce-lockfile: this slice carries no pubspec.lock.
+            - run: flutter pub get
+
+            - run: cargo codegen frb auth
+              working-directory: rust
+
+            - name: Create artifacts directory
+              run: mkdir artifacts
+
+            - name: Build Windows release
+              shell: bash
+              run: |
+                  flutter config --enable-windows-desktop
+                  flutter build windows --release
+
+            - name: Zip Windows portable payload
+              shell: pwsh
+              run: |
+                  Copy-Item -Recurse -Force `
+                    "build/windows/x64/runner/Release" `
+                    "ente-auth-windows-portable"
+                  $zipPath = "artifacts/ente-auth-windows-portable.zip"
+                  Compress-Archive `
+                    -Path "ente-auth-windows-portable" `
+                    -DestinationPath $zipPath `
+                    -Force
+                  Add-Type -AssemblyName System.IO.Compression.FileSystem
+                  $zip = [System.IO.Compression.ZipFile]::OpenRead((Resolve-Path $zipPath))
+                  $zip.Dispose()
+
+            - name: Upload Windows portable zip
+              uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+              with:
+                  name: ente-auth-windows-portable
+                  path: mobile/apps/auth/artifacts/ente-auth-windows-portable.zip
