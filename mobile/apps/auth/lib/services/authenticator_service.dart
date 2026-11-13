@@ -213,7 +213,13 @@ class AuthenticatorService {
     }
     await _offlineDb.deleteBySyncIds(deleteSyncIds);
     await _offlineDb.putTombstones(tombstones);
-    Bus.instance.fire(CodesUpdatedEvent());
+    // Only notify when the visible list actually changed. WebdavSyncService
+    // listens to this event to schedule an auto-sync, so notifying on a
+    // no-change sync schedules another sync forever: the coalesced sync
+    // future never completes and the sync button spins forever.
+    if (upserts.isNotEmpty || deleteSyncIds.isNotEmpty) {
+      Bus.instance.fire(CodesUpdatedEvent());
+    }
   }
 
   // Local change (enteauth slice): Ente server sync is removed. The

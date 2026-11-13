@@ -1,4 +1,6 @@
 // Local addition (enteauth slice): WebDAV sync settings (offline mode).
+import 'dart:async';
+
 import 'package:ente_auth/core/configuration.dart';
 import 'package:ente_auth/services/authenticator_service.dart';
 import 'package:ente_auth/services/webdav_sync_service.dart';
@@ -281,7 +283,19 @@ class _WebdavSettingsPageState extends State<WebdavSettingsPage> {
     try {
       await _persistConfig();
       if (!mounted) return;
-      final result = await _service.syncNow(isManual: true);
+      WebdavSyncResult result;
+      try {
+        result = await _service
+            .syncNow(isManual: true)
+            .timeout(const Duration(seconds: 120));
+      } on TimeoutException {
+        if (!mounted) return;
+        showToast(
+          context,
+          '${context.strings.webdavSyncFailed}: sync timed out',
+        );
+        return;
+      }
       if (!mounted) return;
       showToast(
         context,

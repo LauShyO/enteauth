@@ -9,11 +9,16 @@
 // Merge rule: per sync id the newer updatedAt wins; a tombstone at or after
 // the entity's updatedAt deletes it. Sync runs only in offline mode — in
 // online mode Ente's own sync owns the data.
+//
+// Transport is raw dart:io HttpClient with an explicit Content-Length on
+// PUT, mirroring the DavSync implementation proven against the same
+// Nutstore account: the first build used Dio, which streams the body
+// chunked, and Nutstore answered that PUT with 404 on-device (2026-11-13).
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'dart:typed_data';
 
-import 'package:dio/dio.dart';
 import 'package:ente_auth/core/configuration.dart';
 import 'package:ente_auth/events/codes_updated_event.dart';
 import 'package:ente_auth/models/export/ente.dart';
@@ -71,9 +76,10 @@ class WebdavSyncService {
 
   final _logger = Logger('WebdavSyncService');
   late SharedPreferences _prefs;
-  late Dio _dio;
+  late HttpClient _client;
 
-  static const String defaultRemotePath = 'ente-auth-webdav-sync.json';
+  static const String defaultRemotePath = 'EnteAuth/ente-auth-webdav-sync.json';
+  static const String _legacyDefaultRemotePath = 'ente-auth-webdav-sync.json';
 
   static const _keyEnabled = 'webdav_sync_enabled';
   static const _keyAutoSync = 'webdav_sync_auto';
@@ -91,14 +97,14 @@ class WebdavSyncService {
   Future<void> init() async {
     if (_initialized) return;
     _prefs = await SharedPreferences.getInstance();
-    _dio = Dio(
-      BaseOptions(
-        connectTimeout: const Duration(seconds: 15),
-        receiveTimeout: const Duration(seconds: 60),
-        sendTimeout: const Duration(seconds: 60),
-        validateStatus: (_) => true,
-      ),
-    );
+    _client = HttpClient()
+      ..connectionTimeout = const Duration(seconds: 15);
+    // The first build defaulted to a root-level file, which Nutstore
+    // answered with 404 on PUT. No sync ever succeeded at that path, so a
+    // stored copy of the old default is safe to move to the new one.
+    if (_prefs.getString(_keyRemotePath) == _legacyDefaultRemotePath) {
+      await _prefs.setString(_keyRemotePath, defaultRemotePath);
+    }
     Bus.instance.on<CodesUpdatedEvent>().listen((_) => _scheduleAutoSync());
     _initialized = true;
     if (isEnabled && autoSync) {
@@ -176,10 +182,20 @@ class WebdavSyncService {
   }) async {
     try {
       WebdavSyncResult lastResult;
+      var passes = 0;
       do {
         _syncRerunRequested = false;
         lastResult = await _syncOnce(isManual: isManual);
-      } while (_syncRerunRequested);
+        passes++;
+        // Bound reruns: events arriving during a sync (a code edit, or the
+        // auto-sync timer) request another pass, but the future behind the
+        // sync button must always complete. A still-pending rerun is handed
+        // to the auto-sync timer instead of blocking this future.
+      } while (_syncRerunRequested && passes < 3);
+      if (_syncRerunRequested) {
+        _syncRerunRequested = false;
+        _scheduleAutoSync();
+      }
       completer.complete(lastResult);
     } catch (e, s) {
       _logger.severe('Unexpected failure while coalescing syncs', e, s);
@@ -479,17 +495,10 @@ class WebdavSyncService {
     String fileUrl,
     Map<String, String> headers,
   ) async {
-    final response = await _dio.get(
-      fileUrl,
-      options: Options(headers: headers, responseType: ResponseType.bytes),
-    );
-    final status = response.statusCode ?? 0;
+    final res = await _send('GET', fileUrl, headers, null);
+    final status = res.status;
     if (status == 200) {
-      final data = response.data;
-      if (data is List<int>) {
-        return Uint8List.fromList(data);
-      }
-      return Uint8List.fromList(utf8.encode(data.toString()));
+      return res.body;
     }
     if (status == 404 || status == 409) {
       return null;
@@ -500,7 +509,7 @@ class WebdavSyncService {
       );
     }
     throw WebdavSyncException(
-      'WebDAV server returned $status while downloading the sync file',
+      'WebDAV server returned $status while downloading $fileUrl',
     );
   }
 
@@ -510,15 +519,15 @@ class WebdavSyncService {
     Uint8List bytes,
     String server,
   ) async {
-    final response = await _put(fileUrl, headers, bytes);
+    // Create parent collections first, like the proven DavSync flow:
+    // Nutstore answers PUT with 404 when a parent is missing.
+    await _createParentCollections(server, headers);
+    var response = await _put(fileUrl, headers, bytes);
     if (response == null) return;
-    if (response == 409) {
+    if (response == 404 || response == 409) {
       await _createParentCollections(server, headers);
-      final retry = await _put(fileUrl, headers, bytes);
-      if (retry == null) return;
-      throw WebdavSyncException(
-        'WebDAV server returned $retry while uploading the sync file',
-      );
+      response = await _put(fileUrl, headers, bytes);
+      if (response == null) return;
     }
     if (response == 401) {
       throw const WebdavSyncException(
@@ -526,24 +535,25 @@ class WebdavSyncService {
       );
     }
     throw WebdavSyncException(
-      'WebDAV server returned $response while uploading the sync file',
+      'WebDAV server returned $response while uploading to $fileUrl',
     );
   }
 
   /// PUT the vault. Returns null on success, otherwise the status code.
+  /// Uses an explicit Content-Length: Dio streams the body chunked, and
+  /// Nutstore answered that with 404 on-device.
   Future<int?> _put(
     String fileUrl,
     Map<String, String> headers,
     Uint8List bytes,
   ) async {
-    final response = await _dio.put(
+    final res = await _send(
+      'PUT',
       fileUrl,
-      data: bytes,
-      options: Options(
-        headers: {...headers, 'Content-Type': 'application/json'},
-      ),
+      {...headers, 'Content-Type': 'application/octet-stream'},
+      bytes,
     );
-    final status = response.statusCode ?? 0;
+    final status = res.status;
     if (status == 200 || status == 201 || status == 204) {
       return null;
     }
@@ -551,7 +561,6 @@ class WebdavSyncService {
   }
 
   /// Create each missing parent collection of the remote path, top-down.
-  /// 405 (already exists) is fine.
   Future<void> _createParentCollections(
     String server,
     Map<String, String> headers,
@@ -564,16 +573,38 @@ class WebdavSyncService {
     var prefix = base;
     for (var i = 0; i < segments.length - 1; i++) {
       prefix = '$prefix/${segments[i]}';
-      final response = await _dio.fetch(
-        RequestOptions(path: prefix, method: 'MKCOL', headers: headers),
-      );
-      final status = response.statusCode ?? 0;
-      if (status != 201 && status != 405) {
-        throw WebdavSyncException(
-          'WebDAV server returned $status while creating $prefix',
+      final res = await _send('MKCOL', prefix, headers, null);
+      // 201 created; 405/301/409 mean it already exists or the parent is
+      // missing. Only auth failure blocks the upload; anything else
+      // surfaces as the PUT result, like the DavSync flow.
+      if (res.status == 401) {
+        throw const WebdavSyncException(
+          'WebDAV authentication failed (401). Check the username and password.',
         );
       }
     }
+  }
+
+  Future<_DavResponse> _send(
+    String method,
+    String url,
+    Map<String, String> headers,
+    Uint8List? body,
+  ) async {
+    final request = await _client.openUrl(method, Uri.parse(url));
+    for (final entry in headers.entries) {
+      request.headers.set(entry.key, entry.value);
+    }
+    if (body != null) {
+      request.contentLength = body.length;
+      request.add(body);
+    }
+    final response =
+        await request.close().timeout(const Duration(seconds: 60));
+    final bytes = await response
+        .fold<List<int>>(<int>[], (acc, chunk) => acc..addAll(chunk))
+        .timeout(const Duration(seconds: 60));
+    return _DavResponse(response.statusCode, Uint8List.fromList(bytes));
   }
 
   Future<Uint8List> _encryptVault(WebdavVault vault, String password) async {
@@ -658,4 +689,11 @@ class _ApplyOutcome {
   final int iconErrors;
 
   const _ApplyOutcome({required this.remoteApplied, required this.iconErrors});
+}
+
+class _DavResponse {
+  final int status;
+  final Uint8List body;
+
+  const _DavResponse(this.status, this.body);
 }
